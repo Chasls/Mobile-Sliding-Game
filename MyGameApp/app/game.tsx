@@ -42,6 +42,11 @@ export default function GameScreen() {
   const [playerScore, setPlayerScore] = useState(0);
   const [pcScore, setPcScore] = useState(0);
   const [round, setRound] = useState(1);
+  const [aim, setAim] = useState<{ dx: number; dy: number; active: boolean }>({
+    dx: 0,
+    dy: 0,
+    active: false,
+  });
 
   const levelDef = LEVELS[level];
   const [ball, setBall] = useState<BallState>({
@@ -56,14 +61,26 @@ export default function GameScreen() {
     PanResponder.create({
       onStartShouldSetPanResponder: () => !ball.launched && playerTurn,
       onMoveShouldSetPanResponder: () => !ball.launched && playerTurn,
+      onPanResponderGrant: () => {
+        if (!ball.launched && playerTurn) {
+          setAim({ dx: 0, dy: 0, active: true });
+        }
+      },
+      onPanResponderMove: (_, gesture) => {
+        if (!ball.launched && playerTurn) {
+          setAim({ dx: gesture.dx, dy: gesture.dy, active: true });
+        }
+      },
       onPanResponderRelease: (_, gesture) => {
         if (!ball.launched && playerTurn) {
+          const scale = 0.2;
           setBall((b) => ({
             ...b,
-            vx: gesture.vx * 30,
-            vy: gesture.vy * 30,
+            vx: -gesture.dx * scale,
+            vy: -gesture.dy * scale,
             launched: true,
           }));
+          setAim({ dx: 0, dy: 0, active: false });
           setMessage('');
         }
       },
@@ -250,32 +267,52 @@ export default function GameScreen() {
     }
   };
 
+  const aimLength = Math.hypot(aim.dx, aim.dy);
+  const aimThickness = Math.max(2, 10 - Math.min(1, aimLength / 150) * 8);
+  const aimAngle = Math.atan2(-aim.dy, -aim.dx);
+
   return (
     <ThemedView style={styles.container} {...pan.panHandlers}>
-      {levelDef.obstacles.map((o, i) => (
+      <View style={styles.board}>
+        {levelDef.obstacles.map((o, i) => (
+          <View
+            key={i}
+            style={[styles.obstacle, { left: o.x, top: o.y, width: o.width, height: o.height }]}
+          />
+        ))}
         <View
-          key={i}
-          style={[styles.obstacle, { left: o.x, top: o.y, width: o.width, height: o.height }]}
+          style={[
+            styles.goal,
+            { left: levelDef.goal.x, top: levelDef.goal.y, width: levelDef.goal.size, height: levelDef.goal.size },
+          ]}
         />
-      ))}
-      <View
-        style={[
-          styles.goal,
-          { left: levelDef.goal.x, top: levelDef.goal.y, width: levelDef.goal.size, height: levelDef.goal.size },
-        ]}
-      />
-      <View
-        style={[
-          styles.ball,
-          {
-            left: ball.x - BALL_RADIUS,
-            top: ball.y - BALL_RADIUS,
-            width: BALL_RADIUS * 2,
-            height: BALL_RADIUS * 2,
-            backgroundColor: playerTurn ? BALLS[ballType].color : 'tomato',
-          },
-        ]}
-      />
+        <View
+          style={[
+            styles.ball,
+            {
+              left: ball.x - BALL_RADIUS,
+              top: ball.y - BALL_RADIUS,
+              width: BALL_RADIUS * 2,
+              height: BALL_RADIUS * 2,
+              backgroundColor: playerTurn ? BALLS[ballType].color : 'tomato',
+            },
+          ]}
+        />
+        {aim.active && (
+          <View
+            style={[
+              styles.aimLine,
+              {
+                width: aimLength,
+                height: aimThickness,
+                left: ball.x,
+                top: ball.y - aimThickness / 2,
+                transform: [{ rotate: `${aimAngle}rad` }],
+              },
+            ]}
+          />
+        )}
+      </View>
       <View style={styles.ui} pointerEvents="box-none">
         <View style={styles.ballRow}>
           <Pressable
@@ -311,9 +348,17 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff',
   },
+  board: {
+    flex: 1,
+  },
   ball: {
     position: 'absolute',
     borderRadius: BALL_RADIUS,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 2,
+    elevation: 3,
   },
   goal: {
     position: 'absolute',
@@ -324,6 +369,11 @@ const styles = StyleSheet.create({
   obstacle: {
     position: 'absolute',
     backgroundColor: '#999',
+  },
+  aimLine: {
+    position: 'absolute',
+    backgroundColor: 'tomato',
+    borderRadius: 4,
   },
   ui: {
     position: 'absolute',
